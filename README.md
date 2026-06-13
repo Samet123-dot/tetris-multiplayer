@@ -1,22 +1,13 @@
 # Tetris - Çok Oyunculu
 
-Firebase ile gerçek zamanlı çok oyunculu Tetris oyunu.
+PeerJS (WebRTC) ile eşler arası gerçek zamanlı çok oyunculu Tetris.  
+**Hiçbir sunucu gerekmez!** Adblock sorunsuz çalışır.
 
-## 🚀 GitHub Pages'e Yükleme
+## 🚀 GitHub Pages'e Yükle
 
 1. Bu repoyu GitHub'a pushla
-2. Settings > Pages > "main" branch'ini seç
-3. Birkaç dakika sonra `https://KULLANICIADI.github.io/REPO-ADI` adresinde oyun yayında olur
-
-## 🔥 Firebase Kurulumu (Multiplayer için)
-
-Multiplayer oynamak için Firebase lazım:
-
-1. [Firebase Console](https://console.firebase.google.com/)'a git
-2. "Proje Oluştur" de
-3. Proje ayarlarına gir > "Web uygulaması" ekle
-4. Aldığın config bilgilerini `index.html` içindeki `firebaseConfig` kısmına yapıştır
-5. **Firestore**'u aç > "Veritabanı Oluştur" > "Test modunda başlat" seç
+2. Settings > Pages > "main" branch → `/ (root)`
+3. `https://KULLANICIADI.github.io/REPO-ADI` adresinde oyun yayında
 
 ## 🎮 Oynanış
 
@@ -35,5 +26,4 @@ Multiplayer oynamak için Firebase lazım:
 
 ## 📁 Dosyalar
 
-- `index.html` - Oyun dosyası (GitHub Pages'e bunu yükle)
-- `firestore.rules` - Firebase güvenlik kuralları
+- `index.html` - Oyun dosyası (tek dosya, her şey içinde)
