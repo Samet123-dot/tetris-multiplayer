@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tetris - Çok Oyunculu</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#0a0a1a;color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh;overflow:hidden;user-select:none}
+#app{text-align:center;max-width:900px;width:100%;padding:10px}
+h1{font-size:3em;font-weight:900;background:linear-gradient(135deg,#00f5ff,#ff00e5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:5px;letter-spacing:4px;text-transform:uppercase;text-shadow:none}
+h1 span{-webkit-text-fill-color:#fff;background:none;font-size:0.4em;display:block;letter-spacing:2px;opacity:.6}
+
+/* Lobby */
+#lobby{max-width:420px;margin:20px auto}
+.input-group{margin:12px 0;text-align:left}
+.input-group label{display:block;font-size:.85em;color:#888;margin-bottom:4px;letter-spacing:1px}
+.input-group input{width:100%;padding:12px 16px;border:2px solid #222;border-radius:8px;background:#111;color:#fff;font-size:1em;outline:none;transition:border .3s}
+.input-group input:focus{border-color:#00f5ff}
+.btn-row{display:flex;gap:10px;margin-top:15px}
+.btn{flex:1;padding:14px;border:none;border-radius:8px;font-size:1em;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .3s;text-transform:uppercase;letter-spacing:1px}
+.btn:hover{transform:translateY(-2px)}
+.btn:active{transform:translateY(0)}
+.btn-primary{background:linear-gradient(135deg,#00f5ff,#0088ff);color:#fff;box-shadow:0 4px 20px rgba(0,245,255,.3)}
+.btn-secondary{background:linear-gradient(135deg,#ff00e5,#b000ff);color:#fff;box-shadow:0 4px 20px rgba(255,0,229,.3)}
+.btn-success{background:linear-gradient(135deg,#00e676,#00c853);color:#fff;box-shadow:0 4px 20px rgba(0,230,118,.3)}
+.btn-danger{background:linear-gradient(135deg,#ff1744,#d50000);color:#fff;box-shadow:0 4px 20px rgba(255,23,68,.3)}
+.btn-dark{background:#1a1a2e;color:#fff;border:2px solid #333}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+#roomCodeDisplay{display:none;margin:15px 0;padding:15px;background:#111;border:2px dashed #333;border-radius:8px;font-size:1.1em}
+#roomCodeDisplay .code{font-size:2em;font-weight:900;letter-spacing:8px;color:#00f5ff;margin-top:5px}
+#roomStatus{margin:10px 0;padding:10px;border-radius:8px;background:#111;color:#888}
+#roomStatus .ready-count{color:#00e676;font-weight:700}
+.or-divider{display:flex;align-items:center;gap:15px;margin:18px 0;color:#444;font-size:.85em;text-transform:uppercase}
+.or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:#222}
+#errorMsg{color:#ff1744;font-size:.85em;min-height:1.5em;margin:5px 0}
+
+/* Game */
+#game{display:none;gap:20px;justify-content:center;align-items:flex-start;margin-top:10px}
+#game.active{display:flex}
+#game canvas{border:2px solid #333;border-radius:4px;background:#0d0d1a;display:block}
+#mainBoard{border-color:#00f5ff !important;box-shadow:0 0 30px rgba(0,245,255,.1)}
+#sidePanel{text-align:left;min-width:160px}
+.panel-box{background:#111;border:1px solid #222;border-radius:8px;padding:12px;margin-bottom:12px}
+.panel-box h3{font-size:.7em;text-transform:uppercase;letter-spacing:2px;color:#666;margin-bottom:6px}
+.panel-box .value{font-size:1.3em;font-weight:700;color:#fff}
+#nextCanvas{border-color:#444 !important;box-shadow:none !important;margin-top:4px}
+#opponentSection{display:none}
+#opponentSection.active{display:block}
+#oppBoard{border-color:#ff00e5 !important;box-shadow:0 0 20px rgba(255,0,229,.1)}
+#opponentName{font-size:.8em;color:#ff00e5;margin-top:4px;text-align:center}
+
+/* Controls info */
+#controlsInfo{position:fixed;bottom:15px;left:50%;transform:translateX(-50%);color:#444;font-size:.75em;letter-spacing:1px;text-align:center;line-height:1.6}
+
+/* Game Over */
+#gameOverOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);justify-content:center;align-items:center;z-index:100}
+#gameOverOverlay.active{display:flex}
+#gameOverBox{background:#111;border:2px solid #333;border-radius:16px;padding:40px;text-align:center;max-width:400px}
+#gameOverBox h2{font-size:2em;margin-bottom:10px;color:#ff1744}
+#gameOverBox .final-score{font-size:3em;font-weight:900;color:#00f5ff;margin:10px 0}
+#gameOverBox .detail{color:#888;margin:5px 0}
+#gameOverBox .btn{margin-top:15px;width:100%}
+
+/* Mobile touch controls */
+#touchControls{display:none;position:fixed;bottom:0;left:0;right:0;padding:10px 15px 25px;background:rgba(10,10,26,.95);border-top:1px solid #222;justify-content:space-between;z-index:50}
+.touch-btn{width:60px;height:60px;border:2px solid #444;border-radius:12px;background:rgba(255,255,255,.05);color:#fff;font-size:1.5em;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s}
+.touch-btn:active{background:rgba(0,245,255,.2);border-color:#00f5ff}
+.touch-group{display:flex;gap:6px;align-items:center}
+.touch-group.vertical{flex-direction:column}
+
+@media(max-width:700px){
+  #touchControls.active{display:flex}
+  h1{font-size:2em}
+  #game.active{flex-direction:column;align-items:center;gap:10px}
+  #sidePanel{display:flex;flex-wrap:wrap;gap:10px;min-width:auto;width:100%;max-width:340px}
+  .panel-box{flex:1;min-width:70px;margin:0;padding:8px}
+  .panel-box .value{font-size:1em}
+  #opponentSection.active{display:block;width:100%;max-width:340px}
+  #oppSection canvas{margin:0 auto}
+  #controlsInfo{display:none}
+}
+
+@media(max-width:400px){
+  h1{font-size:1.5em}
+  .btn{font-size:.85em;padding:12px}
+  #lobby{max-width:100%;padding:0 10px}
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <h1>TETRİS <span>çok oyunculu</span></h1>
+
+  <!-- LOBBY -->
+  <div id="lobby">
+    <div class="input-group">
+      <label>ADIN</label>
+      <input type="text" id="playerName" placeholder="Adını gir..." maxlength="12" autocomplete="off">
+    </div>
+    <div id="errorMsg"></div>
+    <button class="btn btn-primary" id="btnSingle" onclick="startSinglePlayer()">🎮 TEK OYUNCULU</button>
+    <div class="or-divider">ya da</div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="btnCreate" onclick="createRoom()">➕ ODA OLUŞTUR</button>
+      <button class="btn btn-dark" id="btnJoinToggle" onclick="toggleJoinInput()">🔗 ODAYA KATIL</button>
+    </div>
+    <div id="joinSection" style="display:none">
+      <div class="input-group" style="margin-top:12px">
+        <label>ODA KODU</label>
+        <input type="text" id="roomCodeInput" placeholder="Örn: ABCD" maxlength="4" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-weight:700" autocomplete="off">
+      </div>
+      <button class="btn btn-success" onclick="joinRoom()">KATIL</button>
+    </div>
+
+    <div id="roomCodeDisplay">
+      <div style="color:#666;font-size:.85em;">ODA KODUN</div>
+      <div class="code" id="roomCodeValue">----</div>
+      <div style="color:#555;font-size:.8em;margin-top:5px">Arkadaşına bu kodu ver</div>
+    </div>
+
+    <div id="roomStatus">
+      <span id="statusText">Odaya katılmayı bekliyor...</span><br>
+      <span class="ready-count" id="readyCount">0/2 hazır</span>
+      <div style="margin-top:10px">
+        <button class="btn btn-success" id="btnReady" onclick="toggleReady()" style="display:none;padding:10px 30px;font-size:.9em">✓ HAZIRIM</button>
+      </div>
+      <button class="btn btn-danger" id="btnLeave" onclick="leaveRoom()" style="display:none;margin-top:8px;padding:8px;font-size:.75em;width:auto">ODADAN AYRIL</button>
+    </div>
+  </div>
+
+  <!-- GAME -->
+  <div id="game">
+    <div id="sidePanel">
+      <div class="panel-box">
+        <h3>Sıradaki</h3>
+        <canvas id="nextCanvas" width="120" height="120"></canvas>
+      </div>
+      <div class="panel-box">
+        <h3>Skor</h3>
+        <div class="value" id="scoreValue">0</div>
+      </div>
+      <div class="panel-box">
+        <h3>Seviye</h3>
+        <div class="value" id="levelValue">1</div>
+      </div>
+      <div class="panel-box">
+        <h3>Satır</h3>
+        <div class="value" id="linesValue">0</div>
+      </div>
+      <div id="opponentSection">
+        <div class="panel-box" style="text-align:center">
+          <h3>Rakip</h3>
+          <canvas id="oppBoard" width="120" height="240"></canvas>
+          <div id="opponentName">Bekleniyor...</div>
+        </div>
+      </div>
+    </div>
+    <canvas id="mainBoard" width="300" height="600"></canvas>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="gameOverOverlay">
+    <div id="gameOverBox">
+      <h2 id="gameOverTitle">OYUN BİTTİ</h2>
+      <div class="final-score" id="finalScore">0</div>
+      <div class="detail" id="finalDetail">Toplam Skor</div>
+      <div class="detail" id="finalOpponent" style="color:#ff00e5"></div>
+      <button class="btn btn-primary" onclick="backToLobby()">LOBBYE DÖN</button>
+      <button class="btn btn-dark" onclick="restartGame()" style="margin-top:8px">TEKRAR DENE</button>
+    </div>
+  </div>
+</div>
+
+<div id="controlsInfo">
+  ← → Hareket &nbsp;|&nbsp; ↑ Döndür &nbsp;|&nbsp; ↓ Yavaşla &nbsp;|&nbsp; SPACE Bırak &nbsp;|&nbsp; P Duraklat
+</div>
+
+<div id="touchControls">
+  <div class="touch-group vertical">
+    <div class="touch-btn" ontouchstart="rotatePiece()">↻</div>
+  </div>
+  <div class="touch-group">
+    <div class="touch-btn" ontouchstart="moveLeft()">←</div>
+    <div class="touch-btn" ontouchstart="hardDrop()">⬇</div>
+    <div class="touch-btn" ontouchstart="moveRight()">→</div>
+  </div>
+  <div class="touch-group vertical">
+    <div class="touch-btn" ontouchstart="softDrop()">↓</div>
+  </div>
+</div>
+
+<script>
+// ========== FIREBASE CONFIG ==========
+// TODO: Burayı kendi Firebase projenin bilgileriyle değiştir
+// https://console.firebase.google.com/ adresinden proje oluşturup
+// "Proje Ayarları" > "Genel" > "Web uygulaması" ekleyerek alabilirsin
+const firebaseConfig = {
+  apiKey: "AIzaSyAgYej-NEFkkE-7gQdgmIccJVc7gN3TBNg",
+  authDomain: "tetris-d4074.firebaseapp.com",
+  databaseURL: "https://tetris-d4074-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "tetris-d4074",
+  storageBucket: "tetris-d4074.firebasestorage.app",
+  messagingSenderId: "563114750710",
+  appId: "1:563114750710:web:2410e8e82e84a3582a32d7",
+  measurementId: "G-3LL52WM09Z"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ========== TETRIS CONSTANTS ==========
+const COLS = 10;
+const ROWS = 20;
+
+
+const PIECES = [
+  { shape: [[1,1,1,1]], color: '#00f5ff' },  // I
+  { shape: [[1,1],[1,1]], color: '#ffe600' }, // O
+  { shape: [[0,1,0],[1,1,1]], color: '#b000ff' }, // T
+  { shape: [[0,1,1],[1,1,0]], color: '#00e676' }, // S
+  { shape: [[1,1,0],[0,1,1]], color: '#ff1744' }, // Z
+  { shape: [[1,0,0],[1,1,1]], color: '#2979ff' }, // J
+  { shape: [[0,0,1],[1,1,1]], color: '#ff9100' }  // L
+];
+
+const LEVEL_SPEEDS = [
+  800,720,630,550,470,380,290,200,120,80,
+  70,60,50,40,30,25,20,15,12,10
+];
+
+// ========== GAME STATE ==========
+const state = {
+  board: [],
+  current: null,
+  next: null,
+  score: 0,
+  lines: 0,
+  level: 1,
+  gameOver: false,
+  paused: false,
+  dropTimer: 0,
+  lastTime: 0,
+  isSinglePlayer: true,
+  roomId: null,
+  playerId: null,
+  playerNum: 1,
+  ready: false,
+  opponentBoard: [],
+  opponentName: '',
+  unsubRoom: null,
+  animFrame: null,
+  started: false,
+  garbageToSend: 0,
+};
+
+// ========== CANVAS SETUP ==========
+const mainCanvas = document.getElementById('mainBoard');
+const mainCtx = mainCanvas.getContext('2d');
+const nextCanvas = document.getElementById('nextCanvas');
+const nextCtx = nextCanvas.getContext('2d');
+const oppCanvas = document.getElementById('oppBoard');
+const oppCtx = oppCanvas.getContext('2d');
+
+// ========== TETRIS ENGINE ==========
+function createBoard() {
+  return Array.from({length: ROWS}, () => Array(COLS).fill(0));
+}
+
+function randomPiece() {
+  const idx = Math.floor(Math.random() * PIECES.length);
+  const p = PIECES[idx];
+  return {
+    shape: p.shape.map(r => [...r]),
+    color: p.color,
+    type: idx,
+    x: Math.floor((COLS - p.shape[0].length) / 2),
+    y: 0,
+  };
+}
+
+function rotateMatrix(m) {
+  return m[0].map((_, i) => m.map(r => r[i]).reverse());
+}
+
+function collides(board, piece, px, py, shape) {
+  const s = shape || piece.shape;
+  for (let r = 0; r < s.length; r++) {
+    for (let c = 0; c < s[r].length; c++) {
+      if (s[r][c]) {
+        const nx = (px !== undefined ? px : piece.x) + c;
+        const ny = (py !== undefined ? py : piece.y) + r;
+        if (nx < 0 || nx >= COLS || ny >= ROWS || (ny >= 0 && board[ny][nx])) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function lockPiece() {
+  const p = state.current;
+  if (!p) return;
+  const b = state.board;
+  for (let r = 0; r < p.shape.length; r++) {
+    for (let c = 0; c < p.shape[r].length; c++) {
+      if (p.shape[r][c]) {
+        const y = p.y + r;
+        const x = p.x + c;
+        if (y >= 0) b[y][x] = p.color;
+      }
+    }
+  }
+  clearLines();
+  spawnPiece();
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (state.board[r].every(c => c !== 0)) {
+      state.board.splice(r, 1);
+      state.board.unshift(Array(COLS).fill(0));
+      cleared++;
+      r++;
+    }
+  }
+  if (cleared > 0) {
+    state.lines += cleared;
+    state.score += [0, 100, 300, 500, 800][cleared] * state.level;
+    state.level = Math.min(Math.floor(state.lines / 10) + 1, 20);
+    updateUI();
+    if (!state.isSinglePlayer && state.playerNum === 1) {
+      state.garbageToSend += cleared - 1;
+    } else if (!state.isSinglePlayer && state.playerNum === 2) {
+      state.garbageToSend += cleared - 1;
+    }
+  }
+}
+
+function spawnPiece() {
+  state.current = state.next || randomPiece();
+  state.next = randomPiece();
+  state.current.x = Math.floor((COLS - state.current.shape[0].length) / 2);
+  state.current.y = 0;
+  if (collides(state.board, state.current)) {
+    state.gameOver = true;
+    endGame();
+  }
+  drawNext();
+}
+
+function moveLeft() {
+  if (state.gameOver || state.paused || !state.current) return;
+  if (!collides(state.board, state.current, state.current.x - 1, state.current.y)) {
+    state.current.x--;
+    drawNext();
+  }
+}
+
+function moveRight() {
+  if (state.gameOver || state.paused || !state.current) return;
+  if (!collides(state.board, state.current, state.current.x + 1, state.current.y)) {
+    state.current.x++;
+    drawNext();
+  }
+}
+
+function rotatePiece() {
+  if (state.gameOver || state.paused || !state.current) return;
+  const rotated = rotateMatrix(state.current.shape);
+  if (!collides(state.board, state.current, state.current.x, state.current.y, rotated)) {
+    state.current.shape = rotated;
+  } else {
+    // Wall kick: try shifting left/right
+    for (const offset of [-1, 1, -2, 2]) {
+      if (!collides(state.board, state.current, state.current.x + offset, state.current.y, rotated)) {
+        state.current.shape = rotated;
+        state.current.x += offset;
+        break;
+      }
+    }
+  }
+}
+
+function softDrop() {
+  if (state.gameOver || state.paused || !state.current) return;
+  if (!collides(state.board, state.current, state.current.x, state.current.y + 1)) {
+    state.current.y++;
+    state.score += 1;
+    updateUI();
+  }
+}
+
+function hardDrop() {
+  if (state.gameOver || state.paused || !state.current) return;
+  let dropped = 0;
+  while (!collides(state.board, state.current, state.current.x, state.current.y + 1)) {
+    state.current.y++;
+    dropped++;
+  }
+  state.score += dropped * 2;
+  updateUI();
+  lockPiece();
+}
+
+function getGhostY() {
+  if (!state.current) return null;
+  let gy = state.current.y;
+  while (!collides(state.board, state.current, state.current.x, gy + 1)) gy++;
+  return gy;
+}
+
+// ========== RENDERING ==========
+function drawBoard(ctx, board, ghostY, current, blockSize) {
+  if (!blockSize) blockSize = ctx.canvas.width / COLS;
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.fillStyle = '#0d0d1a';
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,.03)';
+  ctx.lineWidth = 1;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      ctx.strokeRect(c * blockSize, r * blockSize, blockSize, blockSize);
+    }
+  }
+
+  // Board
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (board[r][c]) {
+        drawBlock(ctx, c, r, board[r][c], blockSize);
+      }
+    }
+  }
+
+  // Ghost
+  if (current && ghostY !== null && ghostY !== current.y) {
+    ctx.globalAlpha = 0.2;
+    for (let r = 0; r < current.shape.length; r++) {
+      for (let c = 0; c < current.shape[r].length; c++) {
+        if (current.shape[r][c]) {
+          drawBlock(ctx, current.x + c, ghostY + r, current.color, blockSize);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Current piece
+  if (current) {
+    for (let r = 0; r < current.shape.length; r++) {
+      for (let c = 0; c < current.shape[r].length; c++) {
+        if (current.shape[r][c]) {
+          drawBlock(ctx, current.x + c, current.y + r, current.color, blockSize);
+        }
+      }
+    }
+  }
+}
+
+function drawBlock(ctx, x, y, color, bs) {
+  const pad = 1;
+  if (!bs) bs = ctx.canvas.width / COLS;
+  ctx.fillStyle = color;
+  ctx.fillRect(x * bs + pad, y * bs + pad, bs - pad * 2, bs - pad * 2);
+  // Highlight
+  ctx.fillStyle = 'rgba(255,255,255,.15)';
+  ctx.fillRect(x * bs + pad, y * bs + pad, bs - pad * 2, 3);
+  ctx.fillRect(x * bs + pad, y * bs + pad, 3, bs - pad * 2);
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,.2)';
+  ctx.fillRect(x * bs + bs - 4, y * bs + pad, 3, bs - pad * 2);
+  ctx.fillRect(x * bs + pad, y * bs + bs - 4, bs - pad * 2, 3);
+}
+
+function drawNext() {
+  const ctx = nextCtx;
+  const cw = nextCanvas.width, ch = nextCanvas.height;
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#0d0d1a';
+  ctx.fillRect(0, 0, cw, ch);
+  if (!state.next) return;
+  const s = state.next.shape;
+  const bs = Math.min(cw / 5, ch / 5);
+  const ox = (cw - s[0].length * bs) / 2;
+  const oy = (ch - s.length * bs) / 2;
+  for (let r = 0; r < s.length; r++) {
+    for (let c = 0; c < s[r].length; c++) {
+      if (s[r][c]) {
+        const pad = 1;
+        ctx.fillStyle = state.next.color;
+        ctx.fillRect(ox + c * bs + pad, oy + r * bs + pad, bs - pad * 2, bs - pad * 2);
+      }
+    }
+  }
+}
+
+function renderMain() {
+  const ghost = getGhostY();
+  drawBoard(mainCtx, state.board, ghost, state.current);
+}
+
+function renderOpponent() {
+  const board = state.opponentBoard;
+  if (!board || board.length === 0) {
+    oppCtx.clearRect(0, 0, oppCanvas.width, oppCanvas.height);
+    oppCtx.fillStyle = '#0d0d1a';
+    oppCtx.fillRect(0, 0, oppCanvas.width, oppCanvas.height);
+    return;
+  }
+  drawBoard(oppCtx, board, null, null);
+}
+
+function updateUI() {
+  document.getElementById('scoreValue').textContent = state.score;
+  document.getElementById('levelValue').textContent = state.level;
+  document.getElementById('linesValue').textContent = state.lines;
+}
+
+// ========== GAME LOOP ==========
+function gameLoop(timestamp) {
+  if (state.animFrame) cancelAnimationFrame(state.animFrame);
+  if (state.gameOver) return;
+
+  const delta = timestamp - (state.lastTime || timestamp);
+  state.lastTime = timestamp;
+
+  if (!state.paused && state.current) {
+    state.dropTimer += delta;
+    const speed = LEVEL_SPEEDS[Math.min(state.level - 1, LEVEL_SPEEDS.length - 1)];
+    if (state.dropTimer >= speed) {
+      state.dropTimer = 0;
+      if (!collides(state.board, state.current, state.current.x, state.current.y + 1)) {
+        state.current.y++;
+      } else {
+        lockPiece();
+      }
+    }
+  }
+
+  renderMain();
+
+  if (!state.isSinglePlayer) {
+    renderOpponent();
+  }
+
+  if (!state.gameOver) {
+    state.animFrame = requestAnimationFrame(gameLoop);
+  }
+}
+
+// ========== GAME MANAGEMENT ==========
+function startSinglePlayer() {
+  if (!getPlayerName()) return;
+  state.isSinglePlayer = true;
+  initGame();
+}
+
+function initGame() {
+  state.board = createBoard();
+  state.opponentBoard = [];
+  state.score = 0;
+  state.lines = 0;
+  state.level = 1;
+  state.gameOver = false;
+  state.paused = false;
+  state.dropTimer = 0;
+  state.lastTime = 0;
+  state.garbageToSend = 0;
+
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('game').classList.add('active');
+  document.getElementById('gameOverOverlay').classList.remove('active');
+
+  const oppSection = document.getElementById('opponentSection');
+  if (state.isSinglePlayer) {
+    oppSection.classList.remove('active');
+    document.getElementById('controlsInfo').style.display = 'block';
+  } else {
+    oppSection.classList.add('active');
+    document.getElementById('controlsInfo').style.display = 'block';
+    document.getElementById('opponentName').textContent = state.opponentName || 'Bekleniyor...';
+  }
+
+  document.getElementById('touchControls').classList.add('active');
+
+  // Fill opponent board with empty
+  state.opponentBoard = createBoard();
+
+  spawnPiece();
+  updateUI();
+  renderMain();
+  renderOpponent();
+
+  // Send initial board to firestore
+  if (!state.isSinglePlayer) {
+    syncToFirestore();
+  }
+
+  state.animFrame = requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+  state.gameOver = true;
+  if (state.animFrame) cancelAnimationFrame(state.animFrame);
+
+  if (!state.isSinglePlayer) {
+    syncToFirestore();
+  }
+
+  document.getElementById('finalScore').textContent = state.score;
+  document.getElementById('finalDetail').textContent = `Seviye ${state.level} • ${state.lines} satır`;
+  document.getElementById('gameOverTitle').textContent = 'OYUN BİTTİ';
+
+  if (!state.isSinglePlayer) {
+    document.getElementById('finalOpponent').textContent = `Rakip: ${state.opponentName || '???'}`;
+  } else {
+    document.getElementById('finalOpponent').textContent = '';
+  }
+
+  document.getElementById('gameOverOverlay').classList.add('active');
+}
+
+function restartGame() {
+  document.getElementById('gameOverOverlay').classList.remove('active');
+  if (state.isSinglePlayer) {
+    initGame();
+  } else {
+    resetMultiplayerGame();
+  }
+}
+
+function backToLobby() {
+  if (state.animFrame) cancelAnimationFrame(state.animFrame);
+  if (state.unsubRoom) state.unsubRoom();
+  document.getElementById('game').classList.remove('active');
+  document.getElementById('gameOverOverlay').classList.remove('active');
+  document.getElementById('touchControls').classList.remove('active');
+  document.getElementById('lobby').style.display = 'block';
+  state.started = false;
+  // Leave room if multiplayer
+  if (state.roomId && !state.isSinglePlayer) {
+    leaveRoom();
+  }
+}
+
+// ========== MULTIPLAYER ==========
+function getPlayerName() {
+  const name = document.getElementById('playerName').value.trim();
+  if (!name) {
+    document.getElementById('errorMsg').textContent = 'Lütfen adını gir!';
+    return null;
+  }
+  if (name.length < 2) {
+    document.getElementById('errorMsg').textContent = 'Ad en az 2 karakter olmalı!';
+    return null;
+  }
+  document.getElementById('errorMsg').textContent = '';
+  state.playerName = name;
+  return name;
+}
+
+function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+async function createRoom() {
+  if (!getPlayerName()) return;
+  state.playerId = 'p1_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  state.playerNum = 1;
+
+  let code;
+  let exists = true;
+  while (exists) {
+    code = generateRoomCode();
+    const snap = await db.collection('rooms').doc(code).get();
+    exists = snap.exists;
+  }
+
+  state.roomId = code;
+  document.getElementById('btnCreate').disabled = true;
+  document.getElementById('btnSingle').disabled = true;
+  document.getElementById('btnJoinToggle').disabled = true;
+
+  await db.collection('rooms').doc(code).set({
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    status: 'waiting',
+    players: {
+      player1: { id: state.playerId, name: state.playerName, ready: false },
+      player2: { id: '', name: '', ready: false }
+    },
+    game: {
+      player1: { board: [], score: 0, lines: 0, level: 1, gameOver: false, name: state.playerName },
+      player2: { board: [], score: 0, lines: 0, level: 1, gameOver: false, name: '' },
+      garbageP1: 0,
+      garbageP2: 0,
+    }
+  });
+
+  document.getElementById('roomCodeValue').textContent = code;
+  document.getElementById('roomCodeDisplay').style.display = 'block';
+  document.getElementById('roomStatus').style.display = 'block';
+  document.getElementById('btnReady').style.display = 'inline-block';
+  document.getElementById('btnLeave').style.display = 'inline-block';
+  updateReadyStatus();
+
+  listenToRoom();
+}
+
+async function joinRoom() {
+  if (!getPlayerName()) return;
+  const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+  if (code.length !== 4) {
+    document.getElementById('errorMsg').textContent = 'Geçerli bir oda kodu gir!';
+    return;
+  }
+
+  state.playerId = 'p2_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  state.playerNum = 2;
+  state.roomId = code;
+
+  try {
+    const snap = await db.collection('rooms').doc(code).get();
+    if (!snap.exists) {
+      document.getElementById('errorMsg').textContent = 'Oda bulunamadı!';
+      state.roomId = null;
+      return;
+    }
+    const data = snap.data();
+    if (data.status !== 'waiting' || data.players.player2.id) {
+      document.getElementById('errorMsg').textContent = 'Oda dolu veya oyun başlamış!';
+      state.roomId = null;
+      return;
+    }
+
+    document.getElementById('errorMsg').textContent = '';
+    document.getElementById('btnCreate').disabled = true;
+    document.getElementById('btnSingle').disabled = true;
+    document.getElementById('btnJoinToggle').disabled = true;
+    document.getElementById('roomCodeInput').disabled = true;
+
+    await db.collection('rooms').doc(code).update({
+      'players.player2': { id: state.playerId, name: state.playerName, ready: false },
+      'game.player2.name': state.playerName,
+    });
+
+    document.getElementById('roomCodeValue').textContent = code;
+    document.getElementById('roomCodeDisplay').style.display = 'block';
+    document.getElementById('roomStatus').style.display = 'block';
+    document.getElementById('btnReady').style.display = 'inline-block';
+    document.getElementById('btnLeave').style.display = 'inline-block';
+    updateReadyStatus();
+
+    listenToRoom();
+  } catch (e) {
+    document.getElementById('errorMsg').textContent = 'Odaya katılamadı: ' + e.message;
+    state.roomId = null;
+  }
+}
+
+function listenToRoom() {
+  if (state.unsubRoom) state.unsubRoom();
+  state.unsubRoom = db.collection('rooms').doc(state.roomId).onSnapshot((snap) => {
+    if (!snap.exists) {
+      document.getElementById('errorMsg').textContent = 'Oda silinmiş!';
+      backToLobby();
+      return;
+    }
+    const data = snap.data();
+    handleRoomUpdate(data);
+  });
+}
+
+function handleRoomUpdate(data) {
+  const p = data.players;
+  const g = data.game;
+
+  // Update ready status
+  const p1Ready = p.player1.ready;
+  const p2Ready = p.player2.ready;
+  updateReadyStatus(p1Ready, p2Ready);
+
+  // Check if both ready -> start game
+  if (data.status === 'waiting' && p1Ready && p2Ready && !state.started) {
+    startMultiplayerGame();
+  }
+
+  // Update opponent info
+  if (state.playerNum === 1 && p.player2.name) {
+    state.opponentName = p.player2.name;
+    if (state.started) document.getElementById('opponentName').textContent = p.player2.name;
+  } else if (state.playerNum === 2 && p.player1.name) {
+    state.opponentName = p.player1.name;
+    if (state.started) document.getElementById('opponentName').textContent = p.player1.name;
+  }
+
+  // Update opponent board
+  if (state.started) {
+    const oppKey = state.playerNum === 1 ? 'player2' : 'player1';
+    const oppData = g[oppKey];
+    if (oppData && oppData.board && oppData.board.length > 0) {
+      // Convert array back to board
+      state.opponentBoard = oppData.board;
+      state.opponentName = oppData.name || state.opponentName;
+    }
+
+    // Handle garbage received
+    const myGarbageKey = state.playerNum === 1 ? 'garbageP1' : 'garbageP2';
+    const garbageLines = g[myGarbageKey] || 0;
+    if (garbageLines > 0) {
+      addGarbageLines(garbageLines, myGarbageKey);
+    }
+
+    // Check if opponent game over
+    const oppGameOver = oppData && oppData.gameOver;
+    if (oppGameOver && !state.gameOver) {
+      document.getElementById('finalScore').textContent = state.score;
+      document.getElementById('finalDetail').textContent = `Seviye ${state.level} • ${state.lines} satır`;
+      document.getElementById('gameOverTitle').textContent = '🏆 KAZANDIN!';
+      document.getElementById('finalOpponent').textContent = `Rakibin pes etti!`;
+      document.getElementById('gameOverOverlay').classList.add('active');
+      state.gameOver = true;
+      if (state.animFrame) cancelAnimationFrame(state.animFrame);
+    }
+  }
+}
+
+function updateReadyStatus(p1Ready, p2Ready) {
+  const statusEl = document.getElementById('statusText');
+  if (state.started) return;
+  const otherNum = state.playerNum === 1 ? 2 : 1;
+  const otherReady = otherNum === 1 ? p1Ready : p2Ready;
+
+  if (otherReady === undefined) {
+    statusEl.textContent = 'Odaya katılmayı bekliyor...';
+  } else if (otherReady) {
+    statusEl.textContent = 'Rakip hazır! Hazır olduğunda başla!';
+  } else {
+    statusEl.textContent = 'Rakibin hazırlanması bekleniyor...';
+  }
+
+  const readyCount = [p1Ready, p2Ready].filter(Boolean).length;
+  document.getElementById('readyCount').textContent = `${readyCount}/2 hazır`;
+  document.getElementById('btnReady').textContent = state.ready ? '⏳ BEKLE' : '✓ HAZIRIM';
+  document.getElementById('btnReady').disabled = state.ready;
+}
+
+function toggleReady() {
+  state.ready = !state.ready;
+  const key = state.playerNum === 1 ? 'players.player1.ready' : 'players.player2.ready';
+  db.collection('rooms').doc(state.roomId).update({ [key]: state.ready });
+}
+
+async function startMultiplayerGame() {
+  state.started = true;
+  state.isSinglePlayer = false;
+  document.getElementById('btnReady').style.display = 'none';
+  document.getElementById('roomStatus').style.display = 'none';
+  document.getElementById('roomCodeDisplay').style.display = 'none';
+  document.getElementById('statusText').textContent = 'Oyun başlıyor...';
+  initGame();
+}
+
+function resetMultiplayerGame() {
+  state.board = createBoard();
+  state.opponentBoard = createBoard();
+  state.score = 0;
+  state.lines = 0;
+  state.level = 1;
+  state.gameOver = false;
+  state.paused = false;
+  state.dropTimer = 0;
+  state.lastTime = 0;
+  state.garbageToSend = 0;
+
+  document.getElementById('gameOverOverlay').classList.remove('active');
+
+  // Reset firestore game data
+  const ref = db.collection('rooms').doc(state.roomId);
+  ref.update({
+    [`game.${state.playerNum === 1 ? 'player1' : 'player2'}`]: {
+      board: [],
+      score: 0,
+      lines: 0,
+      level: 1,
+      gameOver: false,
+      name: state.playerName,
+    },
+    [state.playerNum === 1 ? 'game.garbageP1' : 'game.garbageP2']: 0,
+  });
+
+  spawnPiece();
+  updateUI();
+  renderMain();
+  renderOpponent();
+  syncToFirestore();
+
+  state.animFrame = requestAnimationFrame(gameLoop);
+}
+
+function syncToFirestore() {
+  if (state.isSinglePlayer || !state.roomId) return;
+  const playerKey = state.playerNum === 1 ? 'player1' : 'player2';
+  const garbageKey = state.playerNum === 1 ? 'garbageP2' : 'garbageP1';
+
+  const updateData = {
+    [`game.${playerKey}.board`]: state.board,
+    [`game.${playerKey}.score`]: state.score,
+    [`game.${playerKey}.lines`]: state.lines,
+    [`game.${playerKey}.level`]: state.level,
+    [`game.${playerKey}.gameOver`]: state.gameOver,
+  };
+
+  // Send garbage to opponent
+  if (state.garbageToSend > 0) {
+    updateData[`game.${garbageKey}`] = firebase.firestore.FieldValue.increment(state.garbageToSend);
+    state.garbageToSend = 0;
+  }
+
+  db.collection('rooms').doc(state.roomId).update(updateData).catch(() => {});
+}
+
+function addGarbageLines(count, garbageKey) {
+  // Reset garbage
+  db.collection('rooms').doc(state.roomId).update({
+    [garbageKey]: 0
+  }).catch(() => {});
+
+  if (state.gameOver) return;
+
+  // Add garbage lines from bottom
+  for (let i = 0; i < count; i++) {
+    state.board.shift();
+    const hole = Math.floor(Math.random() * COLS);
+    const newRow = Array(COLS).fill('#444');
+    newRow[hole] = 0;
+    state.board.push(newRow);
+  }
+
+  // Check if current piece overlaps with garbage
+  if (state.current && collides(state.board, state.current)) {
+    state.gameOver = true;
+    endGame();
+  }
+}
+
+function leaveRoom() {
+  if (state.roomId) {
+    const ref = db.collection('rooms').doc(state.roomId);
+    if (state.playerNum === 1) {
+      ref.delete().catch(() => {});
+    } else {
+      ref.update({
+        'players.player2': { id: '', name: '', ready: false },
+        'game.player2': { board: [], score: 0, lines: 0, level: 1, gameOver: false, name: '' },
+      }).catch(() => {});
+    }
+    if (state.unsubRoom) state.unsubRoom();
+  }
+  state.roomId = null;
+  state.started = false;
+  state.ready = false;
+  document.getElementById('roomCodeDisplay').style.display = 'none';
+  document.getElementById('roomStatus').style.display = 'none';
+  document.getElementById('btnReady').style.display = 'none';
+  document.getElementById('btnReady').disabled = false;
+  document.getElementById('btnReady').textContent = '✓ HAZIRIM';
+  document.getElementById('btnLeave').style.display = 'none';
+  document.getElementById('btnCreate').disabled = false;
+  document.getElementById('btnSingle').disabled = false;
+  document.getElementById('btnJoinToggle').disabled = false;
+  document.getElementById('roomCodeInput').disabled = false;
+  document.getElementById('roomCodeInput').value = '';
+  document.getElementById('joinSection').style.display = 'none';
+}
+
+function toggleJoinInput() {
+  const el = document.getElementById('joinSection');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// ========== SYNC LOOP ==========
+// Sync game state to firestore every 500ms during multiplayer
+setInterval(() => {
+  if (state.started && !state.isSinglePlayer && !state.gameOver) {
+    syncToFirestore();
+  }
+}, 500);
+
+// ========== INPUT ==========
+document.addEventListener('keydown', (e) => {
+  if (state.gameOver) return;
+  switch (e.key) {
+    case 'ArrowLeft': e.preventDefault(); moveLeft(); break;
+    case 'ArrowRight': e.preventDefault(); moveRight(); break;
+    case 'ArrowUp': e.preventDefault(); rotatePiece(); break;
+    case 'ArrowDown': e.preventDefault(); softDrop(); break;
+    case ' ': e.preventDefault(); hardDrop(); break;
+    case 'p': case 'P': state.paused = !state.paused; break;
+  }
+});
+
+// ========== RESIZE ==========
+function handleResize() {
+  if (window.innerWidth < 700) {
+    const vw = Math.min(window.innerWidth - 40, 340);
+    const bs = Math.floor(vw / COLS);
+    mainCanvas.width = bs * COLS;
+    mainCanvas.height = bs * ROWS;
+  } else {
+    mainCanvas.width = 300;
+    mainCanvas.height = 600;
+  }
+  if (state.board.length > 0) {
+    renderMain();
+    if (!state.isSinglePlayer) renderOpponent();
+  }
+}
+
+window.addEventListener('resize', handleResize);
+setTimeout(handleResize, 100);
+
+console.log('Tetris yuklendi! Firebase configini guncellemeyi unutma!');
+</script>
+</body>
+</html>
