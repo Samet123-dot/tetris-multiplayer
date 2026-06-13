@@ -103,7 +103,7 @@ h1 span{-webkit-text-fill-color:#fff;background:none;font-size:0.4em;display:blo
     <div id="joinSection" style="display:none">
       <div class="input-group" style="margin-top:12px">
         <label>ODA KODU</label>
-        <input type="text" id="roomCodeInput" placeholder="Orn: ABCD" maxlength="4" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-weight:700" autocomplete="off">
+        <input type="text" id="roomCodeInput" placeholder="Orn: abcd" maxlength="4" style="text-transform:lowercase;letter-spacing:4px;text-align:center;font-weight:700" autocomplete="off">
       </div>
       <button class="btn btn-success" onclick="joinRoom()">KATIL</button>
     </div>
@@ -577,7 +577,7 @@ function getPlayerName() {
 }
 
 function generateRoomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
   let code = '';
   for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
@@ -636,9 +636,11 @@ async function createRoom() {
   peer.on('connection', (incomingConn) => {
     conn = incomingConn;
     conn.on('data', handlePeerMessage);
+    conn.on('open', () => {
+      document.getElementById('statusText').textContent = 'Rakip baglandi! Hazir oldugunda basla.';
+      sendMsg({ type: 'join', name: state.playerName, isHost: true });
+    });
     oppConnected = true;
-    document.getElementById('statusText').textContent = 'Rakip baglandi! Hazir oldugunda basla.';
-    sendMsg({ type: 'join', name: state.playerName, isHost: true });
     conn.on('close', () => {
       oppConnected = false;
       document.getElementById('statusText').textContent = 'Rakip ayrildi!';
@@ -649,7 +651,7 @@ async function createRoom() {
 
 async function joinRoom() {
   if (!getPlayerName()) return;
-  const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+  const code = document.getElementById('roomCodeInput').value.trim().toLowerCase();
   if (code.length !== 4) {
     document.getElementById('errorMsg').textContent = 'Gecerli bir oda kodu gir!';
     return;
@@ -664,26 +666,30 @@ async function joinRoom() {
   try {
     peer = new Peer(undefined, { debug: 0 });
     await new Promise((resolve, reject) => {
-      peer.on('open', resolve);
-      peer.on('error', reject);
+      let tid = setTimeout(() => reject(new Error('PeerJS sunucusuna baglanilamadi')), 8000);
+      peer.on('open', () => { clearTimeout(tid); resolve(); });
+      peer.on('error', (e) => { clearTimeout(tid); reject(e); });
     });
   } catch (e) {
-    document.getElementById('errorMsg').textContent = 'PeerJS hatasi: ' + e.message;
-    resetLobby();
+    document.getElementById('errorMsg').textContent = 'Baglanti hatasi: ' + e.message;
+    resetLobby(); cleanupPeer();
     return;
   }
 
+  document.getElementById('statusText').textContent = 'Odaya baglaniyor...';
+
   conn = peer.connect(code, { reliable: true });
+  let connTimeout;
 
   try {
     await new Promise((resolve, reject) => {
-      conn.on('open', resolve);
-      const timeout = setTimeout(() => reject(new Error('Zaman asimi')), 10000);
-      conn.on('error', reject);
+      let ct = setTimeout(() => reject(new Error('Oda bulunamadi')), 10000);
+      conn.on('open', () => { clearTimeout(ct); resolve(); });
+      conn.on('error', (e) => { clearTimeout(ct); reject(e); });
     });
   } catch (e) {
-    document.getElementById('errorMsg').textContent = 'Oda bulunamadi veya baglanti basarisiz!';
-    resetLobby();
+    document.getElementById('errorMsg').textContent = 'Oda kodu hatali veya zaman asimi!';
+    resetLobby(); cleanupPeer();
     return;
   }
 
@@ -695,7 +701,7 @@ async function joinRoom() {
   state.playerNum = 2;
   state.isSinglePlayer = false;
 
-  document.getElementById('roomCodeValue').textContent = code;
+  document.getElementById('roomCodeValue').textContent = code.toUpperCase();
   document.getElementById('roomCodeDisplay').style.display = 'block';
   document.getElementById('roomStatus').style.display = 'block';
   document.getElementById('btnReady').style.display = 'inline-block';
@@ -703,14 +709,13 @@ async function joinRoom() {
   document.getElementById('statusText').textContent = 'Odaya katildin!';
   updateReadyUI();
 
-  sendMsg({ type: 'join', name: state.playerName, isHost: false });
-
   conn.on('data', handlePeerMessage);
   conn.on('close', () => {
     oppConnected = false;
     document.getElementById('statusText').textContent = 'Rakip ayrildi!';
     document.getElementById('btnReady').style.display = 'none';
   });
+  sendMsg({ type: 'join', name: state.playerName, isHost: false });
 }
 
 function handlePeerMessage(data) {
