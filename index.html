@@ -673,46 +673,52 @@ function generateRoomCode() {
 }
 
 async function createRoom() {
-  if (!getPlayerName()) return;
-  state.playerId = 'p1_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-  state.playerNum = 1;
+  try {
+    if (!getPlayerName()) return;
+    state.playerId = 'p1_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    state.playerNum = 1;
 
-  let code;
-  let exists = true;
-  while (exists) {
-    code = generateRoomCode();
-    const snap = await db.collection('rooms').doc(code).get();
-    exists = snap.exists;
-  }
-
-  state.roomId = code;
-  document.getElementById('btnCreate').disabled = true;
-  document.getElementById('btnSingle').disabled = true;
-  document.getElementById('btnJoinToggle').disabled = true;
-
-  await db.collection('rooms').doc(code).set({
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    status: 'waiting',
-    players: {
-      player1: { id: state.playerId, name: state.playerName, ready: false },
-      player2: { id: '', name: '', ready: false }
-    },
-    game: {
-      player1: { board: [], score: 0, lines: 0, level: 1, gameOver: false, name: state.playerName },
-      player2: { board: [], score: 0, lines: 0, level: 1, gameOver: false, name: '' },
-      garbageP1: 0,
-      garbageP2: 0,
+    let code;
+    let exists = true;
+    while (exists) {
+      code = generateRoomCode();
+      const snap = await db.collection('rooms').doc(code).get();
+      exists = snap.exists;
     }
-  });
 
-  document.getElementById('roomCodeValue').textContent = code;
-  document.getElementById('roomCodeDisplay').style.display = 'block';
-  document.getElementById('roomStatus').style.display = 'block';
-  document.getElementById('btnReady').style.display = 'inline-block';
-  document.getElementById('btnLeave').style.display = 'inline-block';
-  updateReadyStatus();
+    state.roomId = code;
+    document.getElementById('btnCreate').disabled = true;
+    document.getElementById('btnSingle').disabled = true;
+    document.getElementById('btnJoinToggle').disabled = true;
 
-  listenToRoom();
+    await db.collection('rooms').doc(code).set({
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      status: 'waiting',
+      players: {
+        player1: { id: state.playerId, name: state.playerName, ready: false },
+        player2: { id: '', name: '', ready: false }
+      },
+      game: {
+        player1: { board: [], score: 0, lines: 0, level: 1, gameOver: false, name: state.playerName },
+        player2: { board: [], score: 0, lines: 0, level: 1, gameOver: false, name: '' },
+        garbageP1: 0,
+        garbageP2: 0,
+      }
+    });
+
+    document.getElementById('roomCodeValue').textContent = code;
+    document.getElementById('roomCodeDisplay').style.display = 'block';
+    document.getElementById('roomStatus').style.display = 'block';
+    document.getElementById('btnReady').style.display = 'inline-block';
+    document.getElementById('btnLeave').style.display = 'inline-block';
+    updateReadyStatus();
+
+    listenToRoom();
+  } catch (e) {
+    document.getElementById('errorMsg').textContent = 'Firebase hatası: ' + e.message;
+    console.error(e);
+    state.roomId = null;
+  }
 }
 
 async function joinRoom() {
@@ -768,15 +774,21 @@ async function joinRoom() {
 
 function listenToRoom() {
   if (state.unsubRoom) state.unsubRoom();
-  state.unsubRoom = db.collection('rooms').doc(state.roomId).onSnapshot((snap) => {
-    if (!snap.exists) {
-      document.getElementById('errorMsg').textContent = 'Oda silinmiş!';
-      backToLobby();
-      return;
+  state.unsubRoom = db.collection('rooms').doc(state.roomId).onSnapshot(
+    (snap) => {
+      if (!snap.exists) {
+        document.getElementById('errorMsg').textContent = 'Oda silinmiş!';
+        backToLobby();
+        return;
+      }
+      const data = snap.data();
+      handleRoomUpdate(data);
+    },
+    (error) => {
+      document.getElementById('errorMsg').textContent = 'Firestore hatası: ' + error.message;
+      console.error(error);
     }
-    const data = snap.data();
-    handleRoomUpdate(data);
-  });
+  );
 }
 
 function handleRoomUpdate(data) {
